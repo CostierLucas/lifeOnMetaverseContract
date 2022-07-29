@@ -1,7 +1,8 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("@nomiclabs/hardhat-etherscan");
 require("dotenv").config();
 
-const { ALCHEMY, PRIVATE_KEY } = process.env;
+const { ALCHEMY, PRIVATE_KEY, POLYGON_SCAN } = process.env;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -23,5 +24,8 @@ module.exports = {
       url: ALCHEMY,
       accounts: [`0x${PRIVATE_KEY}`],
     },
+  },
+  etherscan: {
+    apiKey: POLYGON_SCAN,
   },
 };
