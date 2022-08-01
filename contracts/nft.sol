@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/finance/PaymentSplitter.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 interface contractUSDC {
     function transferFrom(address, address, uint) external returns (bool);
@@ -15,14 +16,17 @@ interface contractUSDC {
 
 contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     using Strings for uint256;
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
 
-    address public usdc;
+    address public usdc = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
 
     struct Category {
         string baseUri;
         uint256 maxSupply;
         uint256 counterSupply;
         uint256 NFTPrice;
+        uint256[] tokensIds;
     }
 
     // Mapping category/info
@@ -30,9 +34,6 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
 
     // Mapping id/category
     mapping(uint256 => uint256) public NFTcategory;
-
-    //maping id/owner
-    mapping(uint256 => address) public NFTowner;
 
     //Constructor
     constructor(string memory _baseUriGold, string memory _baseUriPlatinum, string memory _baseUriDiamond, uint _MAX_SUPPLY_Gold, uint _MAX_SUPPLY_Platinum, uint _MAX_SUPPLY_Diamond, uint _priceGold, uint _pricePlatinum, uint _priceDiamond)
@@ -62,24 +63,31 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     /**
     * @notice Mint function with crossmint
     *
-    * @param _quantity Amount of NFTs the user wants to mint
     * @param _id id of the categories
     **/
-    function crossMint(uint _quantity, uint _id) public payable {
+    function crossMint(uint _id) public payable {
+        uint256 newItemId = _tokenIds.current();
         require(msg.sender == 0xdAb1a1854214684acE522439684a145E62505233,
         "This function is for Crossmint only."
         );
-        _safeMint(msg.sender, _quantity);
+        _tokenIds.increment();
+        _safeMint(msg.sender, newItemId);
     }
 
     /**
     * @notice Mint function with USDC
     *
     * @param _quantity Amount of NFTs the user wants to mint
+    * @param _id id of the categories
     **/
-    function mintUSDC(uint _quantity) external payable callerIsUser whenNotPaused{
+    function mintUSDC(uint _quantity, uint _id) external payable callerIsUser whenNotPaused{
+        uint price = categories[_id].NFTPrice;
+        uint256 newItemId = _tokenIds.current();
+        require( price != 0, "Price is 0");
+        require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
+        _tokenIds.increment();
         contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity);
-        _safeMint(msg.sender, _quantity);
+        _safeMint(msg.sender, newItemId);
     }
 
 
@@ -93,7 +101,17 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     function tokenURI(uint _tokenId) public view virtual override returns(string memory) {
         require(_exists(_tokenId), "URI query for nonexistent token");
 
-        return string(abi.encodePacked(baseURI, _tokenId.toString(), ".json"));
+        for (uint256 i = 0; i <= 2; i++) {
+            if (categories[i].tokensIds.length > 0) {
+                for (uint256 j = 0; j < categories[i].tokensIds.length; j++) {
+                    if (categories[i].tokensIds[j] == _tokenId) {
+                        return string(abi.encodePacked(categories[i].baseUri, _tokenId.toString(), ".json"));
+                    }
+                }
+            }
+        }
+
+        return "";
     }
 
     /**
@@ -104,10 +122,12 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     **/
     function mintMatic(uint _quantity, uint _id) external payable callerIsUser whenNotPaused{
         uint price = categories[_id].NFTPrice;
+        uint256 newItemId = _tokenIds.current();
         require( price != 0, "Price is 0");
         require( _quantity * price <= msg.value, "Not enought MATIC");
         require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
-        _safeMint(msg.sender, _quantity);
+        _tokenIds.increment();
+        _safeMint(msg.sender, newItemId);
         categories[_id].counterSupply += _quantity;
     }
     
