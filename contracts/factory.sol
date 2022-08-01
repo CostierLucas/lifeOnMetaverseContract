@@ -14,18 +14,15 @@ contract FactoryERC721 {
     /**
     * @notice Deploys a ERC721 token with given parameters - returns deployed address
     *
-    * @param _baseUriGold Base URI for Gold token
-    * @param _baseUriPlatinum Base URI for Platinum token
-    * @param _baseUriDiamond Base URI for Diamond token
-    * @param _MAX_SUPPLY_Gold Maximum supply of Gold token
-    * @param _MAX_SUPPLY_Platinum Maximum supply of Platinum token
-    * @param _MAX_SUPPLY_Diamond Maximum supply of Diamond token
-    * @param _priceGold Price of Gold token
-    * @param _pricePlatinum Price of Platinum token
-    * @param _priceDiamond Price of Diamond token
+    * @param _categories categories of the token
+    * @param _baseUri base URI of the token
+    * @param _price price of the token
+    * @param _maxSupply maximum supply of the token
+    * @param _counterSupply counter supply of the token
+    * @param _percentages percentages of the token
     **/
-    function deployERC721(string memory _baseUriGold, string memory _baseUriPlatinum, string memory _baseUriDiamond, uint _MAX_SUPPLY_Gold, uint _MAX_SUPPLY_Platinum, uint _MAX_SUPPLY_Diamond, uint _priceGold, uint _pricePlatinum, uint _priceDiamond) public returns (address) {
-        ERC721Token t = new ERC721Token( _baseUriGold, _baseUriPlatinum, _baseUriDiamond, _MAX_SUPPLY_Gold, _MAX_SUPPLY_Platinum, _MAX_SUPPLY_Diamond, _priceGold, _pricePlatinum, _priceDiamond);
+    function deployERC721(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _counterSupply, uint[] memory _percentages) public returns (address) {
+        ERC721Token t = new ERC721Token(_categories, _baseUri, _price, _maxSupply, _counterSupply, _percentages);
         tokens.push(t);
         indexToContract[tokens.length - 1] = address(t);
         indexToOwner[tokens.length - 1] = tx.origin;

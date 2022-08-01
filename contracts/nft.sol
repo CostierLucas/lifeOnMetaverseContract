@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 
 interface contractUSDC {
     function transferFrom(address, address, uint) external returns (bool);
+    function balanceOf(address) external view returns (uint);
 }
 
 contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
@@ -19,37 +20,25 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
 
+    string[] public categories;
+    string[] public baseUri;
+    uint[] public price;
+    uint[] public maxSupply;
+    uint[] public counterSupply;
+    uint[] public percentages;
+    uint[2][] public tokensIds;
+
     address public usdc = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
-
-    struct Category {
-        string baseUri;
-        uint256 maxSupply;
-        uint256 counterSupply;
-        uint256 NFTPrice;
-        uint256[] tokensIds;
-    }
-
-    // Mapping category/info
-    mapping(uint256 => Category) public categories;
-
-    // Mapping id/category
-    mapping(uint256 => uint256) public NFTcategory;
-
+    
     //Constructor
-    constructor(string memory _baseUriGold, string memory _baseUriPlatinum, string memory _baseUriDiamond, uint _MAX_SUPPLY_Gold, uint _MAX_SUPPLY_Platinum, uint _MAX_SUPPLY_Diamond, uint _priceGold, uint _pricePlatinum, uint _priceDiamond)
+    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _counterSupply, uint[] memory _percentages)
     ERC721("test", "TT") {
-        categories[0].baseUri = _baseUriGold;
-        categories[0].maxSupply = _MAX_SUPPLY_Gold;
-        categories[0].counterSupply = 0;
-        categories[0].NFTPrice = _priceGold;
-        categories[1].baseUri = _baseUriPlatinum;
-        categories[1].maxSupply = _MAX_SUPPLY_Platinum;
-        categories[1].counterSupply = 0;
-        categories[1].NFTPrice = _pricePlatinum;
-        categories[2].baseUri = _baseUriDiamond;
-        categories[2].maxSupply = _MAX_SUPPLY_Diamond;
-        categories[2].counterSupply = 0;
-        categories[2].NFTPrice = _priceDiamond;
+        categories = _categories;
+        baseUri = _baseUri;
+        price = _price;
+        maxSupply = _maxSupply;
+        counterSupply = _counterSupply;
+        percentages = _percentages;
     }
 
     /**
@@ -60,19 +49,30 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         _;
     }
 
+
     /**
     * @notice Mint function with crossmint
     *
     * @param _id id of the categories
     **/
-    function crossMint(uint _id) public payable {
-        uint256 newItemId = _tokenIds.current();
+    function crossMint(uint _id, uint _quantity) public payable {
+        require( price[_id] != 0, "Price is 0");
+        require( _quantity <= maxSupply[_id] - counterSupply[_id], "Not enought supply");
         require(msg.sender == 0xdAb1a1854214684acE522439684a145E62505233,
         "This function is for Crossmint only."
         );
-        _tokenIds.increment();
-        _safeMint(msg.sender, newItemId);
+        if( _quantity > 1 ){
+            for (uint i = 1; i < _quantity; i++) {
+                _safeMint(msg.sender, _tokenIds.current());
+                _tokenIds.increment();
+            }
+        }else{
+            _safeMint(msg.sender, _tokenIds.current());
+            _tokenIds.increment();
+        }
+        counterSupply[_id] += _quantity;
     }
+
 
     /**
     * @notice Mint function with USDC
@@ -81,13 +81,21 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _id id of the categories
     **/
     function mintUSDC(uint _quantity, uint _id) external payable callerIsUser whenNotPaused{
-        uint price = categories[_id].NFTPrice;
-        uint256 newItemId = _tokenIds.current();
-        require( price != 0, "Price is 0");
-        require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
-        _tokenIds.increment();
+        require( price[_id] != 0, "Price is 0");
+        require( _quantity <= maxSupply[_id] - counterSupply[_id], "Not enought supply");
+        require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * price[_id], "Not enought USDC");
         contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity);
-        _safeMint(msg.sender, newItemId);
+
+        if( _quantity > 1 ){
+            for (uint i = 1; i < _quantity; i++) {
+                _safeMint(msg.sender, _tokenIds.current());
+                _tokenIds.increment();
+            }
+        }else{
+            _safeMint(msg.sender, _tokenIds.current());
+            _tokenIds.increment();
+        }
+        counterSupply[_id] += _quantity;
     }
 
 
@@ -101,121 +109,62 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     function tokenURI(uint _tokenId) public view virtual override returns(string memory) {
         require(_exists(_tokenId), "URI query for nonexistent token");
 
-        for (uint256 i = 0; i <= 2; i++) {
-            if (categories[i].tokensIds.length > 0) {
-                for (uint256 j = 0; j < categories[i].tokensIds.length; j++) {
-                    if (categories[i].tokensIds[j] == _tokenId) {
-                        return string(abi.encodePacked(categories[i].baseUri, _tokenId.toString(), ".json"));
-                    }
-                }
+        for(uint i = 0; i < tokensIds.length; i++) {
+            if(tokensIds[i][1] == _tokenId) {
+                return string(abi.encodePacked(baseUri[tokensIds[i][0]], _tokenId.toString(), ".json"));
             }
         }
-
         return "";
     }
 
-    /**
-    * @notice Mint function with MATIC
-    *
-    * @param _quantity Amount of NFTs the user wants to mint
-    * @param _id id of the categories
-    **/
-    function mintMatic(uint _quantity, uint _id) external payable callerIsUser whenNotPaused{
-        uint price = categories[_id].NFTPrice;
-        uint256 newItemId = _tokenIds.current();
-        require( price != 0, "Price is 0");
-        require( _quantity * price <= msg.value, "Not enought MATIC");
-        require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
-        _tokenIds.increment();
-        _safeMint(msg.sender, newItemId);
-        categories[_id].counterSupply += _quantity;
-    }
-    
 
     /**
-    * @notice Change the base URI of the NFTs gold
+    * @notice add a new category to the contract
     *
-    * @param _baseUriGold the new base URI of the NFTs
+    * @param _categories the category you want to add
+    * @param _baseUri the base URI of the category you want to add
+    * @param _price the price of the category you want to add
+    * @param _maxSupply the max supply of the category you want to add
+    * @param _percentages the percentage of the category you want to add
     */
-    function setBaseUriGold(string memory _baseUriGold) external onlyOwner {
-        categories[0].baseUri = _baseUriGold;
+    function addCategory(string memory _categories, string memory _baseUri, uint _price, uint _maxSupply, uint _percentages) external onlyOwner {
+        categories.push(_categories);
+        baseUri.push(_baseUri);
+        price.push(_price);
+        maxSupply.push(_maxSupply);
+        percentages.push(_percentages);
+        counterSupply.push(0);
     }
 
 
     /**
-    * @notice Change the base URI of the NFTs Platinum
+    * @notice remove category from the array
     *
-    * @param _baseUriPlatinum the new base URI of the NFTs
+    * @param _index index number of the category you want to remove
     */
-    function setBaseUriPlatinum(string memory _baseUriPlatinum) external onlyOwner {
-        categories[1].baseUri = _baseUriPlatinum;
+    function removeCategory(uint256 _index) external onlyOwner {
+        require(categories.length > _index, "Index is too high");
+        delete categories[_index];
+        delete baseUri[_index];
+        delete price[_index];
+        delete maxSupply[_index];
+        delete counterSupply[_index];
+        delete percentages[_index];
     }
 
 
     /**
-    * @notice Change the base URI of the NFTs Diamond
-    *
-    * @param _baseUriDiamond the new base URI of the
+    * @notice pause the contract
     */
-    function setBaseUriDiamond(string memory _baseUriDiamond) external onlyOwner {
-        categories[2].baseUri = _baseUriDiamond;
-    }
-
-
-    /**
-    * @notice Change price for NFTs gold
-    *
-    * @param _priceGold new price for gold NFTs
-    */
-    function setPriceGold(uint _priceGold) external onlyOwner {
-        categories[0].NFTPrice = _priceGold;
+    function setPaused() external onlyOwner {
+        _pause();
     }
 
     /**
-    * @notice Change price for platinum NFTs
-    *
-    * @param _pricePlatinum new price for Platinum NFTs
+    * @notice unpause the contract
     */
-    function setPricePlatinum(uint _pricePlatinum) external onlyOwner {
-        categories[1].NFTPrice = _pricePlatinum;
-    }
-
-
-    /**
-    * @notice Change price for Diamond NFTs
-    *
-    * @param _priceDiamond new price for Diamond NFTs
-    */
-    function setPriceDiamond(uint _priceDiamond) external onlyOwner {
-        categories[2].NFTPrice = _priceDiamond;
-    }
-
-
-    /**
-    * @notice Change supply for gold NFTs
-    *
-    * @param _MAX_SUPPLY_Gold new price for gold NFTs
-    */
-    function setSupplyGold(uint _MAX_SUPPLY_Gold) external onlyOwner {
-        categories[0].maxSupply = _MAX_SUPPLY_Gold;
-    }
-
-    /**
-    * @notice Change supply for platinum NFTs
-    *
-    * @param _MAX_SUPPLY_Platinum new price for platinum NFTs
-    */
-    function setSupplyPlatinum(uint _MAX_SUPPLY_Platinum) external onlyOwner {
-        categories[1].maxSupply = _MAX_SUPPLY_Platinum;
-    }
-
-    /**
-    * @notice Change supply for Diamond NFTs
-    *
-    * @param _MAX_SUPPLY_Diamond new price for Diamond NFTs
-    */
-    function setSupplyDiamond(uint _MAX_SUPPLY_Diamond) external onlyOwner {
-        categories[2].maxSupply = _MAX_SUPPLY_Diamond;
+    function setUnPaused() external onlyOwner {
+        _unpause();
     }
 }
 
