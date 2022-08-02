@@ -18,7 +18,7 @@ interface contractUSDC {
 contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     using Strings for uint256;
     using Counters for Counters.Counter;
-    Counters.Counter private _tokenIds;
+    Counters.Counter private _tokenIds; 
 
     string[] public categories;
     string[] public baseUri;
@@ -26,7 +26,8 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     uint[] public maxSupply;
     uint[] public counterSupply;
     uint[] public percentages;
-    uint[2][] public tokensIds;
+
+    mapping(uint256 => uint256) private TokensByIndexCategory; 
 
     address public usdc = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
     
@@ -49,7 +50,6 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         _;
     }
 
-
     /**
     * @notice Mint function with crossmint
     *
@@ -64,10 +64,14 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
+                TokensByIndexCategory[_tokenIds.current()] = _id;
+                withdraw(_tokenIds.current());
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
+            TokensByIndexCategory[_tokenIds.current()] = _id;
+            withdraw(_tokenIds.current());
             _tokenIds.increment();
         }
         counterSupply[_id] += _quantity;
@@ -89,13 +93,18 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
+                TokensByIndexCategory[_tokenIds.current()] = _id;
+                withdraw(_tokenIds.current());
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
+            TokensByIndexCategory[_tokenIds.current()] = _id;
+            withdraw(_tokenIds.current());
             _tokenIds.increment();
         }
         counterSupply[_id] += _quantity;
+        
     }
 
 
@@ -108,13 +117,27 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     */
     function tokenURI(uint _tokenId) public view virtual override returns(string memory) {
         require(_exists(_tokenId), "URI query for nonexistent token");
+        uint indexCategorie = TokensByIndexCategory[_tokenId];
 
-        for(uint i = 0; i < tokensIds.length; i++) {
-            if(tokensIds[i][1] == _tokenId) {
-                return string(abi.encodePacked(baseUri[tokensIds[i][0]], _tokenId.toString(), ".json"));
+        return string(abi.encodePacked(baseUri[indexCategorie], _tokenId.toString(), ".json"));
+    }
+
+
+    /**
+    * @notice Withdraw fund for owner;
+    *
+    * @param _tokenId The ID of the NFT
+    *
+    */
+    function withdraw(uint _tokenId) internal {
+        uint indexCategorie = TokensByIndexCategory[_tokenId];
+        uint pricePercent = price[indexCategorie] * percentages[indexCategorie] / 100;
+
+        for(uint i = 0; i < _tokenIds.current(); i++){  
+            if(TokensByIndexCategory[i] == indexCategorie){
+                contractUSDC(usdc).transferFrom(address(this), ownerOf(i), pricePercent);
             }
         }
-        return "";
     }
 
 
@@ -151,7 +174,6 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         delete counterSupply[_index];
         delete percentages[_index];
     }
-
 
     /**
     * @notice pause the contract
