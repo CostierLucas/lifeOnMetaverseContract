@@ -18,11 +18,10 @@ contract FactoryERC721 {
     * @param _baseUri base URI of the token
     * @param _price price of the token
     * @param _maxSupply maximum supply of the token
-    * @param _counterSupply counter supply of the token
     * @param _percentages percentages of the token
     **/
-    function deployERC721(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _counterSupply, uint[] memory _percentages) public returns (address) {
-        ERC721Token t = new ERC721Token(_categories, _baseUri, _price, _maxSupply, _counterSupply, _percentages);
+    function deployERC721(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages) public returns (address) {
+        ERC721Token t = new ERC721Token(_categories, _baseUri, _price, _maxSupply, _percentages);
         tokens.push(t);
         indexToContract[tokens.length - 1] = address(t);
         indexToOwner[tokens.length - 1] = tx.origin;

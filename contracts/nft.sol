@@ -20,26 +20,42 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds; 
 
-    string[] public categories;
-    string[] public baseUri;
-    uint[] public price;
-    uint[] public maxSupply;
-    uint[] public counterSupply;
-    uint[] public percentages;
+    struct Category {
+        string name;
+        string baseUri;
+        uint price;
+        uint maxSupply;
+        uint counterSupply;
+        uint percentages;
+    }
+
+    Category[] public categories;
 
     mapping(uint256 => uint256) private TokensByIndexCategory; 
 
     address public usdc = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
     
     //Constructor
-    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _counterSupply, uint[] memory _percentages)
+    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages)
     ERC721("test", "TT") {
-        categories = _categories;
-        baseUri = _baseUri;
-        price = _price;
-        maxSupply = _maxSupply;
-        counterSupply = _counterSupply;
-        percentages = _percentages;
+        require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length);
+        require(getSum(_percentages) == 100, "The sum of percentages must be 100");
+        for(uint i = 0; i < _categories.length; i++) {
+            categories.push(Category({
+                name: _categories[i],
+                baseUri: _baseUri[i],
+                price: _price[i],
+                maxSupply: _maxSupply[i],
+                counterSupply: 0,
+                percentages: _percentages[i]
+            }));
+        }
+    }
+
+    /**
+    * @notice fallback functions
+    */
+    receive() external payable {
     }
 
     /**
@@ -51,13 +67,27 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     }
 
     /**
+    * @notice Return sum of array
+    * @return sum
+    */
+    function getSum(uint[] memory _arr) internal pure returns(uint) {
+        uint sum = 0;
+        for(uint i = 0; i < _arr.length; i++) {
+            sum += _arr[i];
+        }
+        return sum;
+    }
+
+
+    /**
     * @notice Mint function with crossmint
     *
     * @param _id id of the categories
+    * @param _quantity quantity of the token
+    * @param _proof proof of the token
     **/
-    function crossMint(uint _id, uint _quantity) public payable {
-        require( price[_id] != 0, "Price is 0");
-        require( _quantity <= maxSupply[_id] - counterSupply[_id], "Not enought supply");
+    function crossMint(uint _id, uint _quantity, bytes32[] calldata _proof) public payable {
+        require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
         require(msg.sender == 0xdAb1a1854214684acE522439684a145E62505233,
         "This function is for Crossmint only."
         );
@@ -65,18 +95,15 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
                 TokensByIndexCategory[_tokenIds.current()] = _id;
-                withdraw(_tokenIds.current());
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
             TokensByIndexCategory[_tokenIds.current()] = _id;
-            withdraw(_tokenIds.current());
             _tokenIds.increment();
         }
-        counterSupply[_id] += _quantity;
+        categories[_id].counterSupply += _quantity;
     }
-
 
     /**
     * @notice Mint function with USDC
@@ -85,28 +112,24 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _id id of the categories
     **/
     function mintUSDC(uint _quantity, uint _id) external payable callerIsUser whenNotPaused{
-        require( price[_id] != 0, "Price is 0");
-        require( _quantity <= maxSupply[_id] - counterSupply[_id], "Not enought supply");
-        require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * price[_id], "Not enought USDC");
+        require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
+        require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * categories[_id].price, "Not enought USDC");
         contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity);
 
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
                 TokensByIndexCategory[_tokenIds.current()] = _id;
-                withdraw(_tokenIds.current());
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
             TokensByIndexCategory[_tokenIds.current()] = _id;
-            withdraw(_tokenIds.current());
             _tokenIds.increment();
         }
-        counterSupply[_id] += _quantity;
+       categories[_id].counterSupply += _quantity;
         
     }
-
 
     /**
     * @notice Get the token URI of an NFT by his ID
@@ -119,25 +142,50 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         require(_exists(_tokenId), "URI query for nonexistent token");
         uint indexCategorie = TokensByIndexCategory[_tokenId];
 
-        return string(abi.encodePacked(baseUri[indexCategorie], _tokenId.toString(), ".json"));
+        return string(abi.encodePacked(categories[indexCategorie].baseUri, _tokenId.toString(), ".json"));
     }
 
+    /**
+    * @notice distribute %
+    *
+    * @param _amount amount of tokens to distribute
+    */
+    function giveStreamRevenue(uint _amount) external{
+        contractUSDC(usdc).transferFrom(msg.sender, address(this), _amount);
+
+        for(uint i = 0; i < _tokenIds.current(); i++){
+            uint indexCategorie = TokensByIndexCategory[i];
+            uint percentage = categories[indexCategorie].percentages;
+            uint amount = _amount * percentage / 100;
+            contractUSDC(usdc).transferFrom(address(this), ownerOf(i), amount);
+        }
+    }
 
     /**
-    * @notice Withdraw fund for owner;
+    * @notice claim reward for holders
     *
-    * @param _tokenId The ID of the NFT
+    * @param _id id of the categories
     *
     */
-    function withdraw(uint _tokenId) internal {
-        uint indexCategorie = TokensByIndexCategory[_tokenId];
-        uint pricePercent = price[indexCategorie] * percentages[indexCategorie] / 100;
+    function claimAll(uint _id) external payable {
+        uint index = balanceOf(msg.sender);
+        uint pricePercent = categories[_id].price * categories[_id].percentages / 100;
 
-        for(uint i = 0; i < _tokenIds.current(); i++){  
-            if(TokensByIndexCategory[i] == indexCategorie){
-                contractUSDC(usdc).transferFrom(address(this), ownerOf(i), pricePercent);
+        for(uint i = 0; i < index; i++) {
+            uint tokenId = tokenOfOwnerByIndex(msg.sender, i);
+            if(TokensByIndexCategory[tokenId] == _id) {
+                contractUSDC(usdc).transferFrom(msg.sender, address(this), pricePercent);
             }
         }
+    }
+
+    /**
+    * @notice Withdraw for owner
+    *
+    */
+    function withdraw() external payable onlyOwner {
+        (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
+		require(success);
     }
 
 
@@ -151,12 +199,14 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _percentages the percentage of the category you want to add
     */
     function addCategory(string memory _categories, string memory _baseUri, uint _price, uint _maxSupply, uint _percentages) external onlyOwner {
-        categories.push(_categories);
-        baseUri.push(_baseUri);
-        price.push(_price);
-        maxSupply.push(_maxSupply);
-        percentages.push(_percentages);
-        counterSupply.push(0);
+        categories.push(Category({
+            name: _categories,
+            baseUri: _baseUri,
+            price: _price,
+            maxSupply: _maxSupply,
+            counterSupply: 0,
+            percentages: _percentages
+        }));
     }
 
 
@@ -168,11 +218,6 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     function removeCategory(uint256 _index) external onlyOwner {
         require(categories.length > _index, "Index is too high");
         delete categories[_index];
-        delete baseUri[_index];
-        delete price[_index];
-        delete maxSupply[_index];
-        delete counterSupply[_index];
-        delete percentages[_index];
     }
 
     /**

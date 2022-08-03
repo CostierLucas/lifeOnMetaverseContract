@@ -2,7 +2,7 @@ require("@nomicfoundation/hardhat-toolbox");
 require("@nomiclabs/hardhat-etherscan");
 require("dotenv").config();
 
-const { ALCHEMY, PRIVATE_KEY, POLYGON_SCAN } = process.env;
+const { ALCHEMY, PRIVATE_KEY, POLYGON_SCAN, ALCHEMY_KEY } = process.env;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -18,13 +18,20 @@ module.exports = {
   paths: {
     artifacts: "./artifacts",
   },
-  defaultNetwork: "mumbai",
   networks: {
-    mumbai: {
-      url: ALCHEMY,
-      accounts: [`0x${PRIVATE_KEY}`],
+    hardhat: {
+      forking: {
+        url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_KEY}`,
+      },
     },
   },
+  // defaultNetwork: "mumbai",
+  // networks: {
+  //   mumbai: {
+  //     url: ALCHEMY,
+  //     accounts: [`0x${PRIVATE_KEY}`],
+  //   },
+  // },
   etherscan: {
     apiKey: POLYGON_SCAN,
   },
