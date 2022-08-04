@@ -38,12 +38,12 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     uint round;
     mapping (uint256 => mapping (uint => bool) ) public IsRoyaltyClaimedPerRound; 
 
-    address public usdc = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
+    address public usdc;
     
     //Constructor
-    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages)
+    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc)
     ERC721("test", "TT") {
-        require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length);
+        require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length, "All arrays must have the same length");
         require(getSum(_percentages) == 100, "The sum of percentages must be 100");
         for(uint i = 0; i < _categories.length; i++) {
             categories.push(Category({
@@ -54,6 +54,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
                 counterSupply: 0,
                 percentages: _percentages[i]
             }));
+            usdc = _usdc;
         }
     }
 
@@ -65,7 +66,9 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
          emit RoyaltiesReceived(msg.sender, msg.value);
     }
  */
-      /**
+
+
+    /**
     * @notice royalties functions
     */
     function FundRoyalties(uint32 amount) public onlyOwner {
@@ -108,6 +111,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _proof proof of the token
     **/
     function crossMint(uint _id, uint _quantity, bytes32[] calldata _proof) public payable {
+        require(_id < categories.length, "Invalid category");
         require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
         require(msg.sender == 0xdAb1a1854214684acE522439684a145E62505233,
         "This function is for Crossmint only."
@@ -133,9 +137,11 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _id id of the categories
     **/
     function mintUSDC(uint _quantity, uint _id) external payable callerIsUser whenNotPaused{
+        require(_id < categories.length, "Invalid category");
         require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
         require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * categories[_id].price, "Not enought USDC");
-        contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity);
+        
+        contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity * categories[_id].price);
 
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
@@ -200,7 +206,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         IsRoyaltyClaimedPerRound[round][_id] = true;
     }
 
-       /**
+    /**
     * @notice claim all rewards for holders
     *
     *Use enumerable properties to display Ids 
@@ -250,7 +256,6 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
             percentages: _percentages
         }));
     }
-
 
     /**
     * @notice remove category from the array

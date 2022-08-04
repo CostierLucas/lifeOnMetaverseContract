@@ -18,20 +18,16 @@ module.exports = {
   paths: {
     artifacts: "./artifacts",
   },
+  // defaultNetwork: "mumbai",
   networks: {
     hardhat: {
-      forking: {
-        url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_KEY}`,
-      },
+      chainId: 1337, // network config 1337 is for test for exemple mainnet ETH : 1
     },
+    // mumbai: {
+    //   url: ALCHEMY,
+    //   accounts: [`0x${PRIVATE_KEY}`],
+    // },
   },
-  // defaultNetwork: "mumbai",
-  // networks: {
-  //   mumbai: {
-  //     url: ALCHEMY,
-  //     accounts: [`0x${PRIVATE_KEY}`],
-  //   },
-  // },
   etherscan: {
     apiKey: POLYGON_SCAN,
   },
