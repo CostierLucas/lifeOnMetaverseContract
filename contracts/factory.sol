@@ -5,28 +5,37 @@ import "./nft.sol";
 
 contract FactoryERC721 {
 
-    ERC721Token[] public tokens; //an array that contains different ERC721 tokens deployed
-    mapping(uint256 => address) public indexToContract; //index to contract address mapping
-    mapping(uint256 => address) public indexToOwner; //index to ERC721 owner address
+    event Deployed(address addr, uint256 salt);
 
-    event ERC721Created(address owner, address tokenContract); //emitted when ERC721 token is deployed
+    function getBytecode(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc) public pure returns (bytes memory){
+        bytes memory bytecode = type(ERC721Token).creationCode;
+        return abi.encodePacked(bytecode, abi.encode( _categories,  _baseUri,  _price,  _maxSupply,  _percentages, _usdc));
+    }
+    function getAddress (bytes memory bytecode, uint _salt) public view returns (address){
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                bytes1(0xff),
+                address(this),
+                _salt,
+                keccak256(bytecode))
+            );
+            return address(uint160(uint256(hash)));
+    }
 
-    /**
-    * @notice Deploys a ERC721 token with given parameters - returns deployed address
-    *
-    * @param _categories categories of the token
-    * @param _baseUri base URI of the token
-    * @param _price price of the token
-    * @param _maxSupply maximum supply of the token
-    * @param _percentages percentages of the token
-    * @param _usdc address of the USDC contract
-    **/
-    function deployERC721(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc ) public returns (address) {
-        ERC721Token t = new ERC721Token(_categories, _baseUri, _price, _maxSupply, _percentages, _usdc);
-        tokens.push(t);
-        indexToContract[tokens.length - 1] = address(t);
-        indexToOwner[tokens.length - 1] = tx.origin;
-        emit ERC721Created(msg.sender,address(t));
-        return address(t);
+    function deploy(bytes memory bytecode, uint _salt) public payable {
+        address addr;
+        assembly{
+            addr := create2(
+                callvalue() // wei sent with current call, equal msg.value
+            , add(bytecode, 0x20), // Actual code starts after skipping the first 32 bytes
+            mload(bytecode)// Load the size of code contained in the first 32 bytes
+            , _salt) 
+            if iszero(extcodesize(addr)){
+                revert(0, 0) //check if it is deployed
+            }
+        }
+        emit Deployed( addr, _salt);
     }
 }
+
+

@@ -1,19 +1,13 @@
-const {
-  time,
-  loadFixture,
-} = require("@nomicfoundation/hardhat-network-helpers");
-const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 
 describe("ERC721Token", function () {
   before(async function () {
-    [this.owner, this.addr1, this.addr2, this.addr3, ...this.addrs] =
-      await ethers.getSigners();
+    [owner, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
   });
 
   it("should deploy ERC20", async function () {
     contract = await hre.ethers.getContractFactory("LifeToken");
-    this.deployedContractErc = await contract.deploy();
+    deployedContractErc = await contract.deploy();
   });
 
   it("should not deploy the smart contract : sum percentages not equal 100% ", async function () {
@@ -31,7 +25,7 @@ describe("ERC721Token", function () {
         _price,
         _maxSupply,
         _percentages,
-        this.deployedContractErc.address
+        deployedContractErc.address
       )
     ).to.be.revertedWith("The sum of percentages must be 100");
   });
@@ -51,7 +45,7 @@ describe("ERC721Token", function () {
         _price,
         _maxSupply,
         _percentages,
-        this.deployedContractErc.address
+        deployedContractErc.address
       )
     ).to.be.revertedWith("All arrays must have the same length");
   });
@@ -64,83 +58,83 @@ describe("ERC721Token", function () {
     _percentages = [50, 50];
     contract = await hre.ethers.getContractFactory("ERC721Token");
 
-    this.deployedContract = await contract.deploy(
+    deployedContract = await contract.deploy(
       _categories,
       _baseUri,
       _price,
       _maxSupply,
       _percentages,
-      this.deployedContractErc.address
+      deployedContractErc.address
     );
   });
 
   it("should approve ERC20 token", async function () {
-    await this.deployedContractErc
-      .connect(this.owner)
+    await deployedContractErc
+      .connect(owner)
       .approve(
-        this.deployedContract.address,
+        deployedContract.address,
         "200000000000000000000000000000000000000000000000000000000000000"
       );
   });
 
   it("should reverse mint because not enought usdc", async function () {
     await expect(
-      this.deployedContract.connect(this.owner).mintUSDC(1, 1)
+      deployedContract.connect(owner).mintUSDC(1, 1)
     ).to.be.revertedWith("Not enought USDC");
   });
 
   it("should mint ERC20 token", async function () {
-    await this.deployedContractErc.connect(this.owner).mint("100000");
+    await deployedContractErc.connect(owner).mint("100000");
   });
 
   it("should approve ERC20 token", async function () {
-    let allow = await this.deployedContractErc.allowance(
-      this.owner.address,
-      this.deployedContract.address
+    let allow = await deployedContractErc.allowance(
+      owner.address,
+      deployedContract.address
     );
   });
 
   it("should not mint : invalid id", async function () {
     await expect(
-      this.deployedContract.connect(this.owner).mintUSDC(1, 4)
+      deployedContract.connect(owner).mintUSDC(1, 4)
     ).to.be.revertedWith("Invalid category");
   });
 
   it("should pause contract", async function () {
-    expect(await this.deployedContract.connect(this.owner).setPaused());
+    expect(await deployedContract.connect(owner).setPaused());
   });
 
   it("should not mint : contract paused", async function () {
     await expect(
-      this.deployedContract.connect(this.owner).mintUSDC(1, 0)
+      deployedContract.connect(owner).mintUSDC(1, 0)
     ).to.be.revertedWith("Pausable: paused");
   });
 
   it("should unpause contract", async function () {
-    expect(await this.deployedContract.connect(this.owner).setUnPaused());
+    expect(await deployedContract.connect(owner).setUnPaused());
   });
 
   it("should not mint : Not enought supply", async function () {
     await expect(
-      this.deployedContract.connect(this.owner).mintUSDC(4, 0)
+      deployedContract.connect(owner).mintUSDC(4, 0)
     ).to.be.revertedWith("Not enought supply");
   });
 
   it("should mint", async function () {
-    await this.deployedContract.connect(this.owner).mintUSDC(1, 1);
+    await deployedContract.connect(owner).mintUSDC(1, 1);
   });
 
   it("should mint multiples", async function () {
-    await this.deployedContract.connect(this.owner).mintUSDC(2, 1);
+    await deployedContract.connect(owner).mintUSDC(2, 1);
   });
 
   it("should not send usdc if not the owner", async function () {
     await expect(
-      this.deployedContract.connect(this.addr1).FundRoyalties(100)
+      deployedContract.connect(addr1).FundRoyalties(100)
     ).to.be.revertedWith("Ownable: caller is not the owner");
   });
 
   it("should send usdc to contract", async function () {
-    expect(await this.deployedContract.connect(this.owner).FundRoyalties(100));
+    expect(await deployedContract.connect(owner).FundRoyalties(100));
   });
 });
