@@ -20,6 +20,8 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds; 
 
+    event RoyaltiesReceived(address, uint);
+
     struct Category {
         string name;
         string baseUri;
@@ -31,7 +33,10 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
 
     Category[] public categories;
 
-    mapping(uint256 => uint256) private TokensByIndexCategory; 
+    mapping(uint256 => uint256) private CategoryById; 
+    uint royaltiesBank;
+    uint round;
+    mapping (uint256 => mapping (uint => bool) ) public IsRoyaltyClaimedPerRound; 
 
     address public usdc = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
     
@@ -55,7 +60,23 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     /**
     * @notice fallback functions
     */
-    receive() external payable {
+  /*   receive() external payable {
+        royaltyBank = royaltyBank + msg.value;
+         emit RoyaltiesReceived(msg.sender, msg.value);
+    }
+ */
+      /**
+    * @notice royalties functions
+    */
+    function FundRoyalties(uint32 amount) public onlyOwner {
+        if(royaltiesBank > 0){
+        bool refundSuccess = contractUSDC(usdc).transferFrom(address(this), msg.sender, royaltiesBank);
+        require(refundSuccess, "Could not transfer token. Missing approval?");
+        }
+        bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), amount);
+        require(success, "Could not transfer token. Missing approval?");
+        royaltiesBank = amount;
+        round++;
     }
 
     /**
@@ -94,12 +115,12 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
-                TokensByIndexCategory[_tokenIds.current()] = _id;
+                CategoryById[_tokenIds.current()] = _id;
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
-            TokensByIndexCategory[_tokenIds.current()] = _id;
+            CategoryById[_tokenIds.current()] = _id;
             _tokenIds.increment();
         }
         categories[_id].counterSupply += _quantity;
@@ -119,12 +140,12 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
-                TokensByIndexCategory[_tokenIds.current()] = _id;
+                CategoryById[_tokenIds.current()] = _id;
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
-            TokensByIndexCategory[_tokenIds.current()] = _id;
+            CategoryById[_tokenIds.current()] = _id;
             _tokenIds.increment();
         }
        categories[_id].counterSupply += _quantity;
@@ -140,7 +161,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     */
     function tokenURI(uint _tokenId) public view virtual override returns(string memory) {
         require(_exists(_tokenId), "URI query for nonexistent token");
-        uint indexCategorie = TokensByIndexCategory[_tokenId];
+        uint indexCategorie = CategoryById[_tokenId];
 
         return string(abi.encodePacked(categories[indexCategorie].baseUri, _tokenId.toString(), ".json"));
     }
@@ -154,7 +175,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         contractUSDC(usdc).transferFrom(msg.sender, address(this), _amount);
 
         for(uint i = 0; i < _tokenIds.current(); i++){
-            uint indexCategorie = TokensByIndexCategory[i];
+            uint indexCategorie = CategoryById[i];
             uint percentage = categories[indexCategorie].percentages;
             uint amount = _amount * percentage / 100;
             contractUSDC(usdc).transferFrom(address(this), ownerOf(i), amount);
@@ -167,16 +188,37 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _id id of the categories
     *
     */
-    function claimAll(uint _id) external payable {
-        uint index = balanceOf(msg.sender);
-        uint pricePercent = categories[_id].price * categories[_id].percentages / 100;
+    function claimRoyalties(uint _id) external  {
+        require(ownerOf(_id) == msg.sender,  "not owner of this NFT");
+        require( IsRoyaltyClaimedPerRound[round][_id] == false, "You already claimed your reward");
+        require(royaltiesBank > 0, "No Rewards Yet");
+        uint indexCategorie = CategoryById[_id];
+        uint claimableReward = (royaltiesBank * categories[indexCategorie].percentages)/100;
+        bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), claimableReward);
+        require(success, "Could not transfer token. Missing approval?");
+        royaltiesBank -= claimableReward;
+        IsRoyaltyClaimedPerRound[round][_id] = true;
+    }
 
-        for(uint i = 0; i < index; i++) {
-            uint tokenId = tokenOfOwnerByIndex(msg.sender, i);
-            if(TokensByIndexCategory[tokenId] == _id) {
-                contractUSDC(usdc).transferFrom(msg.sender, address(this), pricePercent);
-            }
+       /**
+    * @notice claim all rewards for holders
+    *
+    *Use enumerable properties to display Ids 
+    */
+    function claimMultipleRoyalties() external  {
+        require(balanceOf(msg.sender) > 0, "you do not posess this nft");
+        uint sum;
+        for(uint i = 0; i < balanceOf(msg.sender); i ++){
+            require(IsRoyaltyClaimedPerRound[round][tokenOfOwnerByIndex(msg.sender, i)] == false, "You already claimed your reward");
+            require(royaltiesBank > 0, "No Rewards Yet");
+            uint indexCategorie = CategoryById[tokenOfOwnerByIndex(msg.sender, i)];
+            uint claimableReward = (royaltiesBank * categories[indexCategorie].percentages)/100;
+            sum += claimableReward;
+            IsRoyaltyClaimedPerRound[round][tokenOfOwnerByIndex(msg.sender, i)] = true;
         }
+        bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), sum);
+        require(success, "Could not transfer token. Missing approval?");
+        royaltiesBank = royaltiesBank - sum;
     }
 
     /**
