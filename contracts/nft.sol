@@ -38,14 +38,14 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     mapping (uint => uint ) public RoyaltiesClaimablePerCategory;
     mapping (uint => uint ) public RoyaltiesClaimedPerId; 
 
-    address public usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address public usdc;
     address investor;
     address artist;
-    uint256 percentageInvestor = 500;
-    uint256 percentageArtist = 500;    
+    uint256 percentageInvestor = 50;
+    uint256 percentageArtist = 50;    
     
     //Constructor
-    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address  _artist, address _investor)
+    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc,  address  _artist, address _investor)
     ERC721("test", "TT") {
         require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length, "All arrays must have the same length");
         require(getSum(_percentages) == 100, "The sum of percentages must be 100");
@@ -58,6 +58,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
                 counterSupply: 0,
                 percentages: _percentages[i]
             }));
+            usdc = _usdc;
             artist = _artist;
             investor = _investor;
            
@@ -83,10 +84,11 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
      * @param amount amount of royalties sent by the artist
     */
     function FundRoyalties(uint32 amount) public onlyOwner {
+        require(amount > 0, "amount can't be 0");
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), amount);
         require(success, "Could not transfer token. Missing approval?");
         for(uint i=0; i < categories.length; i++){
-            RoyaltiesClaimablePerCategory[i] += (amount * categories[i].percentages / categories[i].maxSupply) / 1000;
+            RoyaltiesClaimablePerCategory[i] += ((amount * categories[i].percentages / categories[i].maxSupply ) / 100);
         }
          emit RoyaltiesReceived(msg.sender, amount);
     }
@@ -115,55 +117,55 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     /**
     * @notice Mint function with crossmint
     *
-    * @param _id id of the categories
+    * @param categoryId id of the category
     * @param _quantity quantity of the token
     * @param _proof proof of the token
     **/
-    function crossMint(uint _id, uint _quantity, bytes32[] calldata _proof) public payable {
-        require(_id < categories.length, "Invalid category");
-        require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
+    function crossMint(uint categoryId, uint _quantity, bytes32[] calldata _proof) public payable {
+        require(categoryId < categories.length, "Invalid category");
+        require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
         require(msg.sender == 0xdAb1a1854214684acE522439684a145E62505233,
         "This function is for Crossmint only."
         );
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
-                CategoryById[_tokenIds.current()] = _id;
+                CategoryById[_tokenIds.current()] = categoryId;
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
-            CategoryById[_tokenIds.current()] = _id;
+            CategoryById[_tokenIds.current()] = categoryId;
             _tokenIds.increment();
         }
-        categories[_id].counterSupply += _quantity;
+        categories[categoryId].counterSupply += _quantity;
     }
 
     /**
     * @notice Mint function with USDC
     *
     * @param _quantity Amount of NFTs the user wants to mint
-    * @param _id id of the categories
+    * @param categoryId id of the category
     **/
-    function mintUSDC(uint _quantity, uint _id) external payable callerIsUser whenNotPaused{
-        require(_id < categories.length, "Invalid category");
-        require( _quantity <= categories[_id].maxSupply - categories[_id].counterSupply, "Not enought supply");
-        require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * categories[_id].price, "Not enought USDC");
+    function mintUSDC(uint _quantity, uint categoryId) external payable callerIsUser whenNotPaused{
+        require(categoryId < categories.length, "Invalid category");
+        require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
+        require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * categories[categoryId].price, "Not enought USDC");
         
-        contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity * categories[_id].price);
+        contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity * categories[categoryId].price);
 
         if( _quantity > 1 ){
             for (uint i = 1; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
-                CategoryById[_tokenIds.current()] = _id;
+                CategoryById[_tokenIds.current()] = categoryId;
                 _tokenIds.increment();
             }
         }else{
             _safeMint(msg.sender, _tokenIds.current());
-            CategoryById[_tokenIds.current()] = _id;
+            CategoryById[_tokenIds.current()] = categoryId;
             _tokenIds.increment();
         }
-       categories[_id].counterSupply += _quantity;
+       categories[categoryId].counterSupply += _quantity;
         
     }
 
@@ -184,18 +186,19 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     /**
     * @notice claim reward for holders
     *
-    * @param _id id of the categories
+    * @param _tokenId id of the NFT you want to claim rewards from
     *
     */
-    function claimRoyalties(uint _id) external  {
-        uint indexCategorie = CategoryById[_id];
-        require(ownerOf(_id) == msg.sender,  "not owner of this NFT");
+    function claimRoyalties(uint _tokenId) external  {
+        require(_tokenId < totalSupply(), "this id do not exist");
+        uint indexCategorie = CategoryById[_tokenId];
+        require(ownerOf(_tokenId) == msg.sender,  "not owner of this NFT");
         require(RoyaltiesClaimablePerCategory[indexCategorie] > 0, "No Rewards Yet");
-        require( RoyaltiesClaimedPerId[_id] < RoyaltiesClaimablePerCategory[indexCategorie] , "You already claimed your reward");
-        uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[_id];
+        require( RoyaltiesClaimedPerId[_tokenId] < RoyaltiesClaimablePerCategory[indexCategorie] , "You already claimed your reward");
+        uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[_tokenId];
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), claimableReward);
         require(success, "Could not transfer token. Missing approval?");
-        RoyaltiesClaimedPerId[_id] = RoyaltiesClaimablePerCategory[indexCategorie];
+        RoyaltiesClaimedPerId[_tokenId] = RoyaltiesClaimablePerCategory[indexCategorie];
     }
 
     /**
@@ -215,6 +218,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
                 RoyaltiesClaimedPerId[tokenId] = RoyaltiesClaimablePerCategory[indexCategorie];
             }
         }
+        require(sum > 0, "you already claimed all your rewards");
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), sum);
         require(success, "Could not transfer token. Missing approval?");
     }
@@ -252,11 +256,11 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     /**
     * @notice remove category from the array
     *
-    * @param _index index number of the category you want to remove
+    * @param categoryId id of the category you want to remove
     */
-    function removeCategory(uint256 _index) external onlyOwner {
-        require(categories.length > _index, "Index is too high");
-        delete categories[_index];
+    function removeCategory(uint256 categoryId) external onlyOwner {
+        require(categories.length > categoryId, "Index is too high");
+        delete categories[categoryId];
     }
 
     /**
