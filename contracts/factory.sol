@@ -11,6 +11,7 @@ contract FactoryERC721 {
         bytes memory bytecode = type(ERC721Token).creationCode;
         return abi.encodePacked(bytecode, abi.encode( _categories,  _baseUri,  _price,  _maxSupply,  _percentages, _usdc));
     }
+    
     function getAddress (bytes memory bytecode, uint _salt) public view returns (address){
         bytes32 hash = keccak256(
             abi.encodePacked(

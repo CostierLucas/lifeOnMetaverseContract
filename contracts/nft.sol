@@ -20,6 +20,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds; 
 
+    event OpenseaReceived(address, uint);
     event RoyaltiesReceived(address, uint);
 
     struct Category {
@@ -33,15 +34,18 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
 
     Category[] public categories;
 
-    mapping(uint256 => uint256) private CategoryById; 
-    uint royaltiesBank;
-    uint round;
-    mapping (uint256 => mapping (uint => bool) ) public IsRoyaltyClaimedPerRound; 
+    mapping(uint => uint) private CategoryById; 
+    mapping (uint => uint ) public RoyaltiesClaimablePerCategory;
+    mapping (uint => uint ) public RoyaltiesClaimedPerId; 
 
-    address public usdc;
+    address public usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address investor;
+    address artist;
+    uint256 percentageInvestor = 500;
+    uint256 percentageArtist = 500;    
     
     //Constructor
-    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc)
+    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address  _artist, address _investor)
     ERC721("test", "TT") {
         require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length, "All arrays must have the same length");
         require(getSum(_percentages) == 100, "The sum of percentages must be 100");
@@ -54,32 +58,37 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
                 counterSupply: 0,
                 percentages: _percentages[i]
             }));
-            usdc = _usdc;
+            artist = _artist;
+            investor = _investor;
+           
         }
     }
 
     /**
     * @notice fallback functions
     */
-  /*   receive() external payable {
-        royaltyBank = royaltyBank + msg.value;
-         emit RoyaltiesReceived(msg.sender, msg.value);
+    receive() external payable {
+        (bool success1, ) = payable(investor).call{value: ((msg.value * percentageInvestor) / 1000)}("");
+		require(success1);
+        (bool success2, ) = payable(artist).call{value: (msg.value * percentageArtist) / 1000}("");
+		require(success2);
+        emit OpenseaReceived(msg.sender, msg.value);
     }
- */
+
 
 
     /**
     * @notice royalties functions
+    *
+     * @param amount amount of royalties sent by the artist
     */
     function FundRoyalties(uint32 amount) public onlyOwner {
-        if(royaltiesBank > 0){
-        bool refundSuccess = contractUSDC(usdc).transferFrom(address(this), msg.sender, royaltiesBank);
-        require(refundSuccess, "Could not transfer token. Missing approval?");
-        }
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), amount);
         require(success, "Could not transfer token. Missing approval?");
-        royaltiesBank = amount;
-        round++;
+        for(uint i=0; i < categories.length; i++){
+            RoyaltiesClaimablePerCategory[i] += (amount * categories[i].percentages / categories[i].maxSupply) / 1000;
+        }
+         emit RoyaltiesReceived(msg.sender, amount);
     }
 
     /**
@@ -173,37 +182,20 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     }
 
     /**
-    * @notice distribute %
-    *
-    * @param _amount amount of tokens to distribute
-    */
-    function giveStreamRevenue(uint _amount) external{
-        contractUSDC(usdc).transferFrom(msg.sender, address(this), _amount);
-
-        for(uint i = 0; i < _tokenIds.current(); i++){
-            uint indexCategorie = CategoryById[i];
-            uint percentage = categories[indexCategorie].percentages;
-            uint amount = _amount * percentage / 100;
-            contractUSDC(usdc).transferFrom(address(this), ownerOf(i), amount);
-        }
-    }
-
-    /**
     * @notice claim reward for holders
     *
     * @param _id id of the categories
     *
     */
     function claimRoyalties(uint _id) external  {
-        require(ownerOf(_id) == msg.sender,  "not owner of this NFT");
-        require( IsRoyaltyClaimedPerRound[round][_id] == false, "You already claimed your reward");
-        require(royaltiesBank > 0, "No Rewards Yet");
         uint indexCategorie = CategoryById[_id];
-        uint claimableReward = (royaltiesBank * categories[indexCategorie].percentages)/100;
+        require(ownerOf(_id) == msg.sender,  "not owner of this NFT");
+        require(RoyaltiesClaimablePerCategory[indexCategorie] > 0, "No Rewards Yet");
+        require( RoyaltiesClaimedPerId[_id] < RoyaltiesClaimablePerCategory[indexCategorie] , "You already claimed your reward");
+        uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[_id];
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), claimableReward);
         require(success, "Could not transfer token. Missing approval?");
-        royaltiesBank -= claimableReward;
-        IsRoyaltyClaimedPerRound[round][_id] = true;
+        RoyaltiesClaimedPerId[_id] = RoyaltiesClaimablePerCategory[indexCategorie];
     }
 
     /**
@@ -215,16 +207,16 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         require(balanceOf(msg.sender) > 0, "you do not posess this nft");
         uint sum;
         for(uint i = 0; i < balanceOf(msg.sender); i ++){
-            require(IsRoyaltyClaimedPerRound[round][tokenOfOwnerByIndex(msg.sender, i)] == false, "You already claimed your reward");
-            require(royaltiesBank > 0, "No Rewards Yet");
-            uint indexCategorie = CategoryById[tokenOfOwnerByIndex(msg.sender, i)];
-            uint claimableReward = (royaltiesBank * categories[indexCategorie].percentages)/100;
-            sum += claimableReward;
-            IsRoyaltyClaimedPerRound[round][tokenOfOwnerByIndex(msg.sender, i)] = true;
+            uint tokenId = tokenOfOwnerByIndex(msg.sender, i);
+            uint indexCategorie = CategoryById[tokenId];
+            if (RoyaltiesClaimedPerId[tokenId] < RoyaltiesClaimablePerCategory[indexCategorie] && RoyaltiesClaimablePerCategory[indexCategorie] > 0 ){
+                uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[tokenId];
+                sum += claimableReward;
+                RoyaltiesClaimedPerId[tokenId] = RoyaltiesClaimablePerCategory[indexCategorie];
+            }
         }
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), sum);
         require(success, "Could not transfer token. Missing approval?");
-        royaltiesBank = royaltiesBank - sum;
     }
 
     /**
