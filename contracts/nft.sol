@@ -127,17 +127,11 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         require(msg.sender == 0xdAb1a1854214684acE522439684a145E62505233,
         "This function is for Crossmint only."
         );
-        if( _quantity > 1 ){
-            for (uint i = 1; i < _quantity; i++) {
+            for (uint i = 0; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
                 CategoryById[_tokenIds.current()] = categoryId;
                 _tokenIds.increment();
             }
-        }else{
-            _safeMint(msg.sender, _tokenIds.current());
-            CategoryById[_tokenIds.current()] = categoryId;
-            _tokenIds.increment();
-        }
         categories[categoryId].counterSupply += _quantity;
     }
 
@@ -151,20 +145,12 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
         require(categoryId < categories.length, "Invalid category");
         require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
         require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * categories[categoryId].price, "Not enought USDC");
-        
         contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity * categories[categoryId].price);
-
-        if( _quantity > 1 ){
-            for (uint i = 1; i < _quantity; i++) {
+            for (uint i = 0; i < _quantity; i++) {
                 _safeMint(msg.sender, _tokenIds.current());
                 CategoryById[_tokenIds.current()] = categoryId;
                 _tokenIds.increment();
             }
-        }else{
-            _safeMint(msg.sender, _tokenIds.current());
-            CategoryById[_tokenIds.current()] = categoryId;
-            _tokenIds.increment();
-        }
        categories[categoryId].counterSupply += _quantity;
         
     }
