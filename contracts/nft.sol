@@ -2,12 +2,10 @@
 pragma solidity ^0.8.14;
 
 // Import this file to use console.log
-import "hardhat/console.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+/* import "hardhat/console.sol"; */
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
-import "@openzeppelin/contracts/finance/PaymentSplitter.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
 interface contractUSDC {
@@ -15,7 +13,7 @@ interface contractUSDC {
     function balanceOf(address) external view returns (uint);
 }
 
-contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
+contract ERC721Token is ERC721Enumerable, Pausable {
     using Strings for uint256;
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds; 
@@ -39,8 +37,8 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     mapping (uint => uint ) public RoyaltiesClaimedPerId; 
 
     address public usdc;
+    address public artist;
     address investor;
-    address artist;
     uint256 percentageInvestor = 50;
     uint256 percentageArtist = 50;    
     
@@ -58,12 +56,29 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
                 counterSupply: 0,
                 percentages: _percentages[i]
             }));
-            usdc = _usdc;
-            artist = _artist;
-            investor = _investor;
-           
         }
+        usdc = _usdc;
+        investor = _investor;
+        artist = _artist;
     }
+
+       /**
+    * @notice onlyArtist modifier
+    */
+  modifier onlyArtist {
+        require(msg.sender == artist, 'Ownable: caller is not the owner');
+        _;
+    }
+
+      /**
+    * @notice This contract can't be called by other contracts
+    */
+    modifier callerIsUser() {
+        require(tx.origin == msg.sender, "The caller is another contract");
+        _;
+    }
+
+    
 
     /**
     * @notice fallback functions
@@ -83,7 +98,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     *
      * @param amount amount of royalties sent by the artist
     */
-    function FundRoyalties(uint32 amount) public onlyOwner {
+    function FundRoyalties(uint32 amount) public onlyArtist {
         require(amount > 0, "amount can't be 0");
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), amount);
         require(success, "Could not transfer token. Missing approval?");
@@ -93,13 +108,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
          emit RoyaltiesReceived(msg.sender, amount);
     }
 
-    /**
-    * @notice This contract can't be called by other contracts
-    */
-    modifier callerIsUser() {
-        require(tx.origin == msg.sender, "The caller is another contract");
-        _;
-    }
+  
 
     /**
     * @notice Return sum of array
@@ -141,7 +150,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _quantity Amount of NFTs the user wants to mint
     * @param categoryId id of the category
     **/
-    function mintUSDC(uint _quantity, uint categoryId) external payable callerIsUser whenNotPaused{
+    function mintUSDC(uint _quantity, uint categoryId) external payable callerIsUser whenNotPaused {
         require(categoryId < categories.length, "Invalid category");
         require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
         require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * categories[categoryId].price, "Not enought USDC");
@@ -152,7 +161,6 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
                 _tokenIds.increment();
             }
        categories[categoryId].counterSupply += _quantity;
-        
     }
 
     /**
@@ -165,7 +173,6 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     function tokenURI(uint _tokenId) public view virtual override returns(string memory) {
         require(_exists(_tokenId), "URI query for nonexistent token");
         uint indexCategorie = CategoryById[_tokenId];
-
         return string(abi.encodePacked(categories[indexCategorie].baseUri, _tokenId.toString(), ".json"));
     }
 
@@ -175,7 +182,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _tokenId id of the NFT you want to claim rewards from
     *
     */
-    function claimRoyalties(uint _tokenId) external  {
+    function claimRoyalties(uint _tokenId) external   {
         require(_tokenId < totalSupply(), "this id do not exist");
         uint indexCategorie = CategoryById[_tokenId];
         require(ownerOf(_tokenId) == msg.sender,  "not owner of this NFT");
@@ -213,7 +220,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @notice Withdraw for owner
     *
     */
-    function withdraw() external payable onlyOwner {
+    function withdraw() external payable onlyArtist {
         (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
 		require(success);
     }
@@ -228,7 +235,7 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     * @param _maxSupply the max supply of the category you want to add
     * @param _percentages the percentage of the category you want to add
     */
-    function addCategory(string memory _categories, string memory _baseUri, uint _price, uint _maxSupply, uint _percentages) external onlyOwner {
+    function addCategory(string memory _categories, string memory _baseUri, uint _price, uint _maxSupply, uint _percentages) external onlyArtist {
         categories.push(Category({
             name: _categories,
             baseUri: _baseUri,
@@ -244,24 +251,25 @@ contract ERC721Token is ERC721Enumerable, Ownable, Pausable {
     *
     * @param categoryId id of the category you want to remove
     */
-    function removeCategory(uint256 categoryId) external onlyOwner {
+    function removeCategory(uint256 categoryId) external onlyArtist {
         require(categories.length > categoryId, "Index is too high");
         delete categories[categoryId];
     }
 
-    /**
+     /**
     * @notice pause the contract
     */
-    function setPaused() external onlyOwner {
+    function setPaused() external onlyArtist {
         _pause();
     }
 
     /**
     * @notice unpause the contract
     */
-    function setUnPaused() external onlyOwner {
+    function setUnPaused() external onlyArtist {
         _unpause();
     }
+
 }
 
 

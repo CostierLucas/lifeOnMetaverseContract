@@ -5,8 +5,10 @@ import { BigNumber, Contract } from "ethers";
 
 describe("ERC721Token", function () {
   let contract: any;
+  let contractFactory: any;
   let deployedContractErc: any;
   let deployedContract: any;
+  let deployedFactory: any;
   let owner: SignerWithAddress;
   let addr1: SignerWithAddress;
   let addr2: SignerWithAddress;
@@ -23,7 +25,9 @@ describe("ERC721Token", function () {
   before(async function () {
     [owner, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
     contract = await ethers.getContractFactory("LifeToken");
+    contractFactory = await ethers.getContractFactory("FactoryERC721");
     deployedContractErc = await contract.deploy();
+    deployedFactory = await contractFactory.deploy();
   });
 
   describe("Deploy not allowed", async function () {
@@ -75,7 +79,7 @@ describe("ERC721Token", function () {
       ).to.be.revertedWith("All arrays must have the same length");
     });
 
-    it("should deploy the smart contract", async function () {
+    it("should deploy the smart contract using the factory", async function () {
       _categories = ["gold", "diamond"];
       _baseUri = ["ipfs://cid/", "ipfs://cid/"];
       _price = [50, 100];
@@ -83,9 +87,8 @@ describe("ERC721Token", function () {
       _percentages = [50, 50];
       _artist = owner.address;
       _investor = addr1.address;
-      contract = await ethers.getContractFactory("ERC721Token");
 
-      deployedContract = await contract.deploy(
+      const bytecode = await deployedFactory.getBytecode(
         _categories,
         _baseUri,
         _price,
@@ -95,6 +98,10 @@ describe("ERC721Token", function () {
         _artist,
         _investor
       );
+
+      await deployedFactory.deploy(bytecode, 11);
+      const address = await deployedFactory.getAddress(bytecode, 11);
+      contract = await ethers.getContractAt("ERC721Token", address);
     });
   });
 
@@ -103,7 +110,7 @@ describe("ERC721Token", function () {
       await deployedContractErc
         .connect(owner)
         .approve(
-          deployedContract.address,
+          contract.address,
           "200000000000000000000000000000000000000000000000000000000000000"
         );
     });
@@ -115,115 +122,111 @@ describe("ERC721Token", function () {
     it("should approve ERC20 token", async function () {
       let allow = await deployedContractErc.allowance(
         owner.address,
-        deployedContract.address
+        contract.address
       );
     });
   });
 
   describe("Mint Token", async function () {
     it("should reverse mint because not enought usdc", async function () {
-      await expect(
-        deployedContract.connect(addr1).mintUSDC(1, 1)
-      ).to.be.revertedWith("Not enought USDC");
+      await expect(contract.connect(addr1).mintUSDC(1, 1)).to.be.revertedWith(
+        "Not enought USDC"
+      );
     });
 
     it("should not mint : invalid id", async function () {
-      await expect(
-        deployedContract.connect(owner).mintUSDC(1, 4)
-      ).to.be.revertedWith("Invalid category");
+      await expect(contract.connect(owner).mintUSDC(1, 4)).to.be.revertedWith(
+        "Invalid category"
+      );
     });
 
     it("should pause contract", async function () {
-      expect(await deployedContract.connect(owner).setPaused());
+      expect(await contract.connect(owner).setPaused());
     });
 
     it("should not mint : contract paused", async function () {
-      await expect(
-        deployedContract.connect(owner).mintUSDC(1, 0)
-      ).to.be.revertedWith("Pausable: paused");
+      await expect(contract.connect(owner).mintUSDC(1, 0)).to.be.revertedWith(
+        "Pausable: paused"
+      );
     });
 
     it("should unpause contract", async function () {
-      expect(await deployedContract.connect(owner).setUnPaused());
+      expect(await contract.connect(owner).setUnPaused());
     });
 
     it("should not mint : Not enought supply", async function () {
-      await expect(
-        deployedContract.connect(owner).mintUSDC(4, 0)
-      ).to.be.revertedWith("Not enought supply");
+      await expect(contract.connect(owner).mintUSDC(4, 0)).to.be.revertedWith(
+        "Not enought supply"
+      );
     });
 
     it("should mint", async function () {
-      await deployedContract.connect(owner).mintUSDC(1, 1);
+      await contract.connect(owner).mintUSDC(1, 1);
     });
 
     it("should mint multiples", async function () {
-      await deployedContract.connect(owner).mintUSDC(2, 1);
+      await contract.connect(owner).mintUSDC(2, 1);
     });
   });
 
   describe("Fund Artist Royalties", async function () {
     it("should not send usdc if not the owner", async function () {
       await expect(
-        deployedContract.connect(addr1).FundRoyalties(1000)
+        contract.connect(addr1).FundRoyalties(1000)
       ).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
     it("should fail if 0 usdc send to contract", async function () {
-      await expect(
-        deployedContract.connect(owner).FundRoyalties(0)
-      ).to.be.revertedWith("amount can't be 0");
+      await expect(contract.connect(owner).FundRoyalties(0)).to.be.revertedWith(
+        "amount can't be 0"
+      );
     });
 
     it("should send usdc to contract", async function () {
-      expect(await deployedContract.connect(owner).FundRoyalties(3000));
+      expect(await contract.connect(owner).FundRoyalties(3000));
     });
 
     it("should increase claimable royalties", async function () {
       expect(
-        await (
-          await deployedContract.RoyaltiesClaimablePerCategory(0)
-        ).toString()
+        await (await contract.RoyaltiesClaimablePerCategory(0)).toString()
       ).to.equal("500");
       expect(
-        await (
-          await deployedContract.RoyaltiesClaimablePerCategory(1)
-        ).toString()
+        await (await contract.RoyaltiesClaimablePerCategory(1)).toString()
       ).to.equal("300");
     });
   });
 
   describe("Claim Artist Royalties", async function () {
     it("should fail if tokenId do not exists", async function () {
-      await expect(deployedContract.claimRoyalties(100)).to.be.revertedWith(
+      await expect(contract.claimRoyalties(100)).to.be.revertedWith(
         "this id do not exist"
       );
     });
     it("should fail if not owner of NFT", async function () {
       await expect(
-        deployedContract.connect(addr1).claimRoyalties(0)
+        contract.connect(addr1).claimRoyalties(0)
       ).to.be.revertedWith("not owner of this NFT");
     });
     it("should display the right amount before claimed", async function () {
       const RoyaltiesClaimed = await (
-        await deployedContract.RoyaltiesClaimedPerId(0)
+        await contract.RoyaltiesClaimedPerId(0)
       ).toString();
       expect(RoyaltiesClaimed).to.equal("0");
     });
     it("should display the right amount after claimed", async function () {
-      await expect(deployedContract.connect(owner).claimRoyalties(0));
+      await expect(contract.connect(owner).claimRoyalties(0));
       const RoyaltiesClaimable = await (
-        await deployedContract.connect(owner).RoyaltiesClaimablePerCategory(1)
+        await contract.connect(owner).RoyaltiesClaimablePerCategory(1)
       ).toString();
       const RoyaltiesClaimed = await (
-        await deployedContract.RoyaltiesClaimedPerId(0)
+        await contract.RoyaltiesClaimedPerId(0)
       ).toString();
       expect(RoyaltiesClaimed).to.equal(RoyaltiesClaimable);
     });
     it("should fail if reward already claimed", async function () {
-      await expect(deployedContract.connect(owner).claimRoyalties(0));
+      await expect(contract.connect(owner).claimRoyalties(0));
       await expect(
-        deployedContract.connect(owner).claimRoyalties(0)
+        contract.connect(owner).claimRoyalties(0)
       ).to.be.revertedWith("You already claimed your reward");
     });
   });
@@ -231,13 +234,13 @@ describe("ERC721Token", function () {
   describe("Claim Multiple Artist Royalties", async function () {
     it("should fail if not owner of any NFT", async function () {
       await expect(
-        deployedContract.connect(addr3).claimMultipleRoyalties()
+        contract.connect(addr3).claimMultipleRoyalties()
       ).to.be.revertedWith("you do not posess this nft");
     });
 
     it("should claim multiple royalties", async function () {
-      await expect(deployedContract.connect(owner).claimMultipleRoyalties());
-      await expect(deployedContract.connect(addr1).claimMultipleRoyalties());
+      await expect(contract.connect(owner).claimMultipleRoyalties());
+      await expect(contract.connect(addr1).claimMultipleRoyalties());
     });
   });
 });

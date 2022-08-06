@@ -7,9 +7,9 @@ contract FactoryERC721 {
 
     event Deployed(address addr, uint256 salt);
 
-    function getBytecode(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc) public pure returns (bytes memory){
+    function getBytecode(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc, address _investor, address _artist) public pure returns (bytes memory){
         bytes memory bytecode = type(ERC721Token).creationCode;
-        return abi.encodePacked(bytecode, abi.encode( _categories,  _baseUri,  _price,  _maxSupply,  _percentages, _usdc));
+        return abi.encodePacked(bytecode, abi.encode( _categories,  _baseUri,  _price,  _maxSupply,  _percentages, _usdc, _investor, _artist));
     }
     
     function getAddress (bytes memory bytecode, uint _salt) public view returns (address){
@@ -23,7 +23,7 @@ contract FactoryERC721 {
             return address(uint160(uint256(hash)));
     }
 
-    function deploy(bytes memory bytecode, uint _salt) public payable {
+    function deploy(bytes memory bytecode, uint _salt) public payable returns (address) {
         address addr;
         assembly{
             addr := create2(
@@ -36,6 +36,7 @@ contract FactoryERC721 {
             }
         }
         emit Deployed( addr, _salt);
+        return addr;
     }
 }
 
