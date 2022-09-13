@@ -38,6 +38,19 @@ contract FactoryERC721 {
         emit Deployed( addr, _salt);
         return addr;
     }
-}
 
+    function crossMintFactory(address payable _contract, address _to, uint _category, uint _amount) public payable  { 
+        require(msg.sender == 0xDa30ee0788276c093e686780C25f6C9431027234,
+        "This function is for Crossmint only."
+        );
+        ERC721Token(_contract).crossMint(_to,_category, _amount);
+    }
+
+    function mintUSDCFactory(address payable _contract, address _usdc, uint _quantity, uint categoryId) public payable  {
+        uint price = ERC721Token(_contract).getPriceByCategory(categoryId);
+        require(contractUSDC(_usdc).balanceOf(msg.sender) >= _quantity * price, "Not enought USDC");
+        contractUSDC(_usdc).transferFrom(msg.sender, _contract, _quantity * price);
+        ERC721Token(_contract).mintUSDC(_quantity, categoryId, msg.sender);
+    }
+}
 

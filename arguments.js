@@ -1,0 +1,10 @@
+module.exports = [
+  ["diamond"],
+  ["ipfs://"],
+  [1],
+  [10],
+  [36],
+  "0xe11A86849d99F524cAC3E7A0Ec1241828e332C62",
+  "0xe11A86849d99F524cAC3E7A0Ec1241828e332C62",
+  "0xe11A86849d99F524cAC3E7A0Ec1241828e332C62",
+];

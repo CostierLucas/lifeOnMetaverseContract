@@ -46,7 +46,6 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc,  address  _artist, address _investor)
     ERC721("test", "TT") {
         require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length, "All arrays must have the same length");
-        require(getSum(_percentages) == 100, "The sum of percentages must be 100");
         for(uint i = 0; i < _categories.length; i++) {
             categories.push(Category({
                 name: _categories[i],
@@ -65,7 +64,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
        /**
     * @notice onlyArtist modifier
     */
-  modifier onlyArtist {
+    modifier onlyArtist {
         require(msg.sender == artist, 'Ownable: caller is not the owner');
         _;
     }
@@ -90,7 +89,6 @@ contract ERC721Token is ERC721Enumerable, Pausable {
 		require(success2);
         emit OpenseaReceived(msg.sender, msg.value);
     }
-
 
 
     /**
@@ -128,16 +126,12 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     *
     * @param categoryId id of the category
     * @param _quantity quantity of the token
-    * @param _proof proof of the token
     **/
-    function crossMint(uint categoryId, uint _quantity, bytes32[] calldata _proof) public payable {
+    function crossMint(address _to, uint categoryId, uint _quantity) public payable {
         require(categoryId < categories.length, "Invalid category");
         require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
-        require(msg.sender == 0xdAb1a1854214684acE522439684a145E62505233,
-        "This function is for Crossmint only."
-        );
             for (uint i = 0; i < _quantity; i++) {
-                _safeMint(msg.sender, _tokenIds.current());
+                _safeMint(_to, _tokenIds.current());
                 CategoryById[_tokenIds.current()] = categoryId;
                 _tokenIds.increment();
             }
@@ -150,13 +144,11 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     * @param _quantity Amount of NFTs the user wants to mint
     * @param categoryId id of the category
     **/
-    function mintUSDC(uint _quantity, uint categoryId) external payable callerIsUser whenNotPaused {
+    function mintUSDC(uint _quantity, uint categoryId, address _to) external payable whenNotPaused {
         require(categoryId < categories.length, "Invalid category");
         require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
-        require(contractUSDC(usdc).balanceOf(msg.sender) >= _quantity * categories[categoryId].price, "Not enought USDC");
-        contractUSDC(usdc).transferFrom(msg.sender, address(this), _quantity * categories[categoryId].price);
             for (uint i = 0; i < _quantity; i++) {
-                _safeMint(msg.sender, _tokenIds.current());
+                _safeMint(_to, _tokenIds.current());
                 CategoryById[_tokenIds.current()] = categoryId;
                 _tokenIds.increment();
             }
@@ -256,7 +248,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         delete categories[categoryId];
     }
 
-     /**
+    /**
     * @notice pause the contract
     */
     function setPaused() external onlyArtist {
@@ -270,8 +262,14 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         _unpause();
     }
 
+    /**
+    * @notice get price of a category
+    * @param categoryId id of the category you want to get the price
+    */
+    function getPriceByCategory(uint categoryId) external view returns(uint) {
+        return categories[categoryId].price;
+    }
 }
-
 
 
 

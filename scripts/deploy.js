@@ -7,27 +7,25 @@
 const hre = require("hardhat");
 
 async function main() {
-  const baseUriGold = "ipfs://cid";
-  const baseUriPlatinum = "ipfs://cid";
-  const baseUriDiamond = "ipfs://cid";
-  const maxSupplyGold = 3;
-  const maxSupplyPlatinum = 3;
-  const maxSupplyDiamond = 3;
-  const priceGold = 1;
-  const pricePlatinum = 1;
-  const priceDiamond = 1;
+  _categories = ["gold", "diamond"];
+  _baseUri = ["ipfs://cid/", "ipfs://cid/"];
+  _price = [50, 100];
+  _maxSupply = [3, 5];
+  _percentages = [50, 50];
+  _usdc = 0x2791bca1f2de4661ed88a30c99a7a9449aa84174;
+  _investor = 0x39f5e8c23f1a7565476b8f851c0a23911e3f6cc2;
+  _artist = 0x39f5e8c23f1a7565476b8f851c0a23911e3f6cc2;
 
   const Contract = await hre.ethers.getContractFactory("ERC721Token");
   const contract = await Contract.deploy(
-    baseUriGold,
-    baseUriPlatinum,
-    baseUriDiamond,
-    maxSupplyGold,
-    maxSupplyPlatinum,
-    maxSupplyDiamond,
-    priceGold,
-    pricePlatinum,
-    priceDiamond
+    _categories,
+    _baseUri,
+    _price,
+    _maxSupply,
+    _percentages,
+    _usdc,
+    _investor,
+    _artist
   );
 
   await contract.deployed();

@@ -1,5 +1,4 @@
 import * as dotenv from "dotenv";
-
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomiclabs/hardhat-ethers";
 import "@nomicfoundation/hardhat-toolbox";
@@ -29,21 +28,21 @@ const config: HardhatUserConfig = {
   paths: {
     artifacts: "./artifacts",
   },
-  // defaultNetwork: "mumbai",
+  defaultNetwork: "mumbai",
   networks: {
-    hardhat: {
-      chainId: 1337, // network config 1337 is for test for exemple mainnet ETH : 1
-    },
-    // mumbai: {
-    //   url: ALCHEMY,
-    //   accounts: [`0x${PRIVATE_KEY}`],
+    // hardhat: {
+    //   chainId: 1337, // network config 1337 is for test for exemple mainnet ETH : 1
     // },
+    mumbai: {
+      url: ALCHEMY,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
   },
-  gasReporter: {
-    enabled: true,
-    currency: "EUR",
-    gasPrice: 60,
-  },
+  // gasReporter: {
+  //   enabled: true,
+  //   currency: "EUR",
+  //   gasPrice: 60,
+  // },
   etherscan: {
     apiKey: POLYGON_SCAN,
   },
