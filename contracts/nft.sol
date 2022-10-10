@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 
 interface contractUSDC {
     function transferFrom(address, address, uint) external returns (bool);
+    function transfer(address, uint) external returns (bool);
     function balanceOf(address) external view returns (uint);
 }
 
@@ -77,8 +78,6 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         _;
     }
 
-    
-
     /**
     * @notice fallback functions
     */
@@ -90,23 +89,20 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         emit OpenseaReceived(msg.sender, msg.value);
     }
 
-
     /**
     * @notice royalties functions
     *
      * @param amount amount of royalties sent by the artist
     */
-    function FundRoyalties(uint32 amount) public onlyArtist {
+    function FundRoyalties(uint amount) public onlyArtist {
         require(amount > 0, "amount can't be 0");
         bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), amount);
         require(success, "Could not transfer token. Missing approval?");
         for(uint i=0; i < categories.length; i++){
             RoyaltiesClaimablePerCategory[i] += ((amount * categories[i].percentages / categories[i].maxSupply ) / 100);
         }
-         emit RoyaltiesReceived(msg.sender, amount);
+        emit RoyaltiesReceived(msg.sender, amount);
     }
-
-  
 
     /**
     * @notice Return sum of array
@@ -181,7 +177,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         require(RoyaltiesClaimablePerCategory[indexCategorie] > 0, "No Rewards Yet");
         require( RoyaltiesClaimedPerId[_tokenId] < RoyaltiesClaimablePerCategory[indexCategorie] , "You already claimed your reward");
         uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[_tokenId];
-        bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), claimableReward);
+        bool success = contractUSDC(usdc).transfer(msg.sender, claimableReward);
         require(success, "Could not transfer token. Missing approval?");
         RoyaltiesClaimedPerId[_tokenId] = RoyaltiesClaimablePerCategory[indexCategorie];
     }
@@ -204,7 +200,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
             }
         }
         require(sum > 0, "you already claimed all your rewards");
-        bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), sum);
+        bool success = contractUSDC(usdc).transfer(msg.sender, sum);
         require(success, "Could not transfer token. Missing approval?");
     }
 
@@ -216,7 +212,6 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
 		require(success);
     }
-
 
     /**
     * @notice add a new category to the contract
@@ -268,6 +263,15 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     */
     function getPriceByCategory(uint categoryId) external view returns(uint) {
         return categories[categoryId].price;
+    }
+
+    /**
+    * @notice get total rewards
+    */
+    function getRewardsByTokenId(uint _tokenId) external view returns(uint) {
+        uint indexCategorie = CategoryById[_tokenId];
+        uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[_tokenId];
+        return claimableReward;
     }
 }
 
