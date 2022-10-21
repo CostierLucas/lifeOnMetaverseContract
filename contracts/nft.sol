@@ -173,7 +173,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     function tokenURI(uint _tokenId) public view virtual override returns(string memory) {
         require(_exists(_tokenId), "URI query for nonexistent token");
         uint indexCategorie = CategoryById[_tokenId];
-        return string(abi.encodePacked(categories[indexCategorie].baseUri, _tokenId.toString(), ".json"));
+        return string(abi.encodePacked(categories[indexCategorie].baseUri));
     }
 
     /**
