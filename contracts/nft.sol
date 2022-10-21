@@ -2,13 +2,13 @@
 pragma solidity ^0.8.14;
 
 // Import this file to use console.log
-/* import "hardhat/console.sol"; */
+/* import "hardhat/console.sol"; */ 
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
-interface contractUSDC {
+interface contractERC20 {
     function transferFrom(address, address, uint) external returns (bool);
     function transfer(address, uint) external returns (bool);
     function balanceOf(address) external view returns (uint);
@@ -40,13 +40,20 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     address public usdc;
     address public artist;
     address investor;
-    uint256 percentageInvestor = 50;
-    uint256 percentageArtist = 50;    
+    uint256 percentageInvestor;
+    uint256 percentageArtist;
+    uint256 startDate;
+
     
     //Constructor
-    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc,  address  _artist, address _investor)
+    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc,  address  _artist, address _investor, uint _percentageInvestor, uint _percentageArtist, uint _startDate)
     ERC721("test", "TT") {
         require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length, "All arrays must have the same length");
+        require(_percentageInvestor + _percentageArtist == 100, "Percentage must be 100");
+        require(_investor != address(0), "Investor address must be different from 0");
+        require(_artist != address(0), "Artist address must be different from 0");
+        require(_usdc != address(0), "USDC address must be different from 0");
+        require(getSum(_percentages) == 100, "The sum of percentages must be 100");
         for(uint i = 0; i < _categories.length; i++) {
             categories.push(Category({
                 name: _categories[i],
@@ -60,13 +67,17 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         usdc = _usdc;
         investor = _investor;
         artist = _artist;
+        percentageInvestor = _percentageInvestor;
+        percentageArtist = _percentageArtist;
+        startDate = _startDate;
+        _tokenIds.increment();
     }
 
-       /**
-    * @notice onlyArtist modifier
+    /**
+    * @notice onlyInvestor modifier
     */
-    modifier onlyArtist {
-        require(msg.sender == artist, 'Ownable: caller is not the owner');
+    modifier onlyInvestor {
+        require(msg.sender == investor, 'Ownable: caller is not the owner');
         _;
     }
 
@@ -82,9 +93,9 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     * @notice fallback functions
     */
     receive() external payable {
-        (bool success1, ) = payable(investor).call{value: ((msg.value * percentageInvestor) / 1000)}("");
+        (bool success1, ) = payable(investor).call{value: ((msg.value * percentageInvestor) / 100)}("");
 		require(success1);
-        (bool success2, ) = payable(artist).call{value: (msg.value * percentageArtist) / 1000}("");
+        (bool success2, ) = payable(artist).call{value: (msg.value * percentageArtist) / 100}("");
 		require(success2);
         emit OpenseaReceived(msg.sender, msg.value);
     }
@@ -94,9 +105,9 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     *
      * @param amount amount of royalties sent by the artist
     */
-    function FundRoyalties(uint amount) public onlyArtist {
+    function FundRoyalties(uint amount) public onlyInvestor{
         require(amount > 0, "amount can't be 0");
-        bool success = contractUSDC(usdc).transferFrom(msg.sender, address(this), amount);
+        bool success = contractERC20(usdc).transferFrom(msg.sender, address(this), amount);
         require(success, "Could not transfer token. Missing approval?");
         for(uint i=0; i < categories.length; i++){
             RoyaltiesClaimablePerCategory[i] += ((amount * categories[i].percentages / categories[i].maxSupply ) / 100);
@@ -116,7 +127,6 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         return sum;
     }
 
-
     /**
     * @notice Mint function with crossmint
     *
@@ -125,6 +135,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     **/
     function crossMint(address _to, uint categoryId, uint _quantity) public payable {
         require(categoryId < categories.length, "Invalid category");
+        require(startDate < block.timestamp, "The sale has not started yet");
         require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
             for (uint i = 0; i < _quantity; i++) {
                 _safeMint(_to, _tokenIds.current());
@@ -142,6 +153,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     **/
     function mintUSDC(uint _quantity, uint categoryId, address _to) external payable whenNotPaused {
         require(categoryId < categories.length, "Invalid category");
+        require(startDate < block.timestamp, "The sale has not started yet");
         require( _quantity <= categories[categoryId].maxSupply - categories[categoryId].counterSupply, "Not enought supply");
             for (uint i = 0; i < _quantity; i++) {
                 _safeMint(_to, _tokenIds.current());
@@ -170,14 +182,14 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     * @param _tokenId id of the NFT you want to claim rewards from
     *
     */
-    function claimRoyalties(uint _tokenId) external   {
+    function claimRoyalties(uint _tokenId) external {
         require(_tokenId < totalSupply(), "this id do not exist");
         uint indexCategorie = CategoryById[_tokenId];
         require(ownerOf(_tokenId) == msg.sender,  "not owner of this NFT");
         require(RoyaltiesClaimablePerCategory[indexCategorie] > 0, "No Rewards Yet");
         require( RoyaltiesClaimedPerId[_tokenId] < RoyaltiesClaimablePerCategory[indexCategorie] , "You already claimed your reward");
         uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[_tokenId];
-        bool success = contractUSDC(usdc).transfer(msg.sender, claimableReward);
+        bool success = contractERC20(usdc).transfer(msg.sender, claimableReward);
         require(success, "Could not transfer token. Missing approval?");
         RoyaltiesClaimedPerId[_tokenId] = RoyaltiesClaimablePerCategory[indexCategorie];
     }
@@ -200,7 +212,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
             }
         }
         require(sum > 0, "you already claimed all your rewards");
-        bool success = contractUSDC(usdc).transfer(msg.sender, sum);
+        bool success = contractERC20(usdc).transfer(msg.sender, sum);
         require(success, "Could not transfer token. Missing approval?");
     }
 
@@ -208,10 +220,19 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     * @notice Withdraw for owner
     *
     */
-    function withdraw() external payable onlyArtist {
+    function withdraw() external payable onlyInvestor {
         (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
 		require(success);
     }
+
+    /**
+    * @notice Withdraw
+    *
+    */
+    function emergencyWithdraw(address erc20Token) external onlyInvestor {
+        contractERC20(erc20Token).transfer(investor, contractERC20(erc20Token).balanceOf(address(this)) * percentageInvestor / 100); 
+        contractERC20(erc20Token).transfer(artist, contractERC20(erc20Token).balanceOf(address(this)) * percentageArtist / 100);
+    } 
 
     /**
     * @notice add a new category to the contract
@@ -222,7 +243,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     * @param _maxSupply the max supply of the category you want to add
     * @param _percentages the percentage of the category you want to add
     */
-    function addCategory(string memory _categories, string memory _baseUri, uint _price, uint _maxSupply, uint _percentages) external onlyArtist {
+    function addCategory(string memory _categories, string memory _baseUri, uint _price, uint _maxSupply, uint _percentages) external onlyInvestor {
         categories.push(Category({
             name: _categories,
             baseUri: _baseUri,
@@ -238,7 +259,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     *
     * @param categoryId id of the category you want to remove
     */
-    function removeCategory(uint256 categoryId) external onlyArtist {
+    function removeCategory(uint256 categoryId) external onlyInvestor {
         require(categories.length > categoryId, "Index is too high");
         delete categories[categoryId];
     }
@@ -246,15 +267,36 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     /**
     * @notice pause the contract
     */
-    function setPaused() external onlyArtist {
+    function setPaused() external onlyInvestor {
         _pause();
     }
 
     /**
     * @notice unpause the contract
     */
-    function setUnPaused() external onlyArtist {
+    function setUnPaused() external onlyInvestor {
         _unpause();
+    }
+
+    /**
+    * @notice set the artist percentage
+    */
+    function setArtistPercentage(uint _percentageArtist) external onlyInvestor {
+        percentageArtist = _percentageArtist;
+    }
+
+    /**
+    * @notice set the investor percentage
+    */
+    function setInvestorPercentage(uint _percentageInvestor) external onlyInvestor {
+        percentageInvestor = _percentageInvestor;
+    }
+
+    /**
+    * @notice set start date
+    */
+    function setStartDate(uint _startDate) external onlyInvestor {
+        startDate = _startDate;
     }
 
     /**
@@ -274,9 +316,4 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         return claimableReward;
     }
 }
-
-
-
-
-
 
