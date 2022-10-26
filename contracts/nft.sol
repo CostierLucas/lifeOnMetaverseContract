@@ -107,7 +107,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     * @notice fallback functions
     */
     receive() external payable {
-        (bool success1, ) = payable(investor).call{value: ((msg.value * percentageInvestor) / 100)}("");
+        (bool success1, ) = payable(investor).call{value: ((msg.value * percentageInvestorOpensea) / 100)}("");
 		require(success1);
         (bool success2, ) = payable(artist).call{value: (msg.value * percentageArtistOpensea) / 100}("");
 		require(success2);
