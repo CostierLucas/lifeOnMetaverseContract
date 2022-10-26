@@ -7,11 +7,11 @@ contract FactoryERC721 {
 
     event Deployed(address addr, uint256 salt);
 
-    function getBytecode(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc, address _investor, address _artist, uint _percentageInvestor, uint _percentageArtist, uint _startDate) public pure returns (bytes memory){
+    function getBytecode(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc, address _investor, address _artist, uint _percentageInvestor, uint _percentageArtist, uint _percentageArtistOpensea, uint _percentageInvestorOpensea, uint _startDate) public pure returns (bytes memory){
         bytes memory bytecode = type(ERC721Token).creationCode;
-        return abi.encodePacked(bytecode, abi.encode( _categories,  _baseUri,  _price,  _maxSupply,  _percentages, _usdc, _investor, _artist, _percentageInvestor, _percentageArtist,_startDate));
+        return abi.encodePacked(bytecode, abi.encode( _categories,  _baseUri,  _price,  _maxSupply,  _percentages, _usdc, _investor, _artist, _percentageInvestor, _percentageArtist, _percentageArtistOpensea,  _percentageInvestorOpensea, _startDate));
     }
-    
+     
     function getAddress (bytes memory bytecode, uint _salt) public view returns (address){
         bytes32 hash = keccak256(
             abi.encodePacked(

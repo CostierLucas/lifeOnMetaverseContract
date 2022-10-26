@@ -20,8 +20,8 @@ const config: HardhatUserConfig = {
     version: "0.8.14",
     settings: {
       optimizer: {
-        enabled: true,
         runs: 200,
+        enabled: true,
       },
     },
   },
@@ -31,7 +31,9 @@ const config: HardhatUserConfig = {
   defaultNetwork: "mumbai",
   networks: {
     // hardhat: {
-    //   chainId: 1337, // network config 1337 is for test for exemple mainnet ETH : 1
+    //   forking: {
+    //     url: "https://eth-mainnet.g.alchemy.com/v2/BwXumcWf-Xq04eq59w16nqM7R37brHIp",
+    //   }, // network config 1337 is for test for exemple mainnet ETH : 1
     // },
     mumbai: {
       url: ALCHEMY,

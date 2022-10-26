@@ -8,11 +8,28 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
+library StructLib {
+    struct Slot{
+        uint160 sqrtPriceX96;
+        int24 tick;
+        uint16 observationIndex;
+        uint16 observationCardinality;
+        uint16 observationCardinalityNext;
+        uint8 feeProtocol;
+        bool unlocked;
+    }
+}
+
 interface contractERC20 {
     function transferFrom(address, address, uint) external returns (bool);
     function transfer(address, uint) external returns (bool);
     function balanceOf(address) external view returns (uint);
 }
+
+interface IUniswapPrice {
+    function slot0() view external returns (StructLib.Slot memory);
+}
+
 
 contract ERC721Token is ERC721Enumerable, Pausable {
     using Strings for uint256;
@@ -35,40 +52,37 @@ contract ERC721Token is ERC721Enumerable, Pausable {
 
     mapping(uint => uint) private CategoryById; 
     mapping (uint => uint ) public RoyaltiesClaimablePerCategory;
-    mapping (uint => uint ) public RoyaltiesClaimedPerId; 
+    mapping (uint => uint ) public RoyaltiesClaimedPerId;
 
     address public usdc;
     address public artist;
+    address public poolContract = 0xA374094527e1673A86dE625aa59517c5dE346d32;
     address investor;
     uint256 percentageInvestor;
     uint256 percentageArtist;
+    uint256 percentageArtistOpensea;
+    uint256 percentageInvestorOpensea;
     uint256 startDate;
-
     
     //Constructor
-    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc,  address  _artist, address _investor, uint _percentageInvestor, uint _percentageArtist, uint _startDate)
+    constructor(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages, address _usdc,  address  _artist, address _investor, uint _percentageInvestor, uint _percentageArtist, uint _percentageArtistOpensea, uint _percentageInvestorOpensea , uint _startDate)
     ERC721("test", "TT") {
         require(_categories.length == _baseUri.length && _categories.length == _price.length && _categories.length == _maxSupply.length && _categories.length == _percentages.length, "All arrays must have the same length");
         require(_percentageInvestor + _percentageArtist == 100, "Percentage must be 100");
+        require(_percentageInvestorOpensea + _percentageArtistOpensea == 100, "Percentage must be 100");
         require(_investor != address(0), "Investor address must be different from 0");
         require(_artist != address(0), "Artist address must be different from 0");
         require(_usdc != address(0), "USDC address must be different from 0");
         require(getSum(_percentages) == 100, "The sum of percentages must be 100");
-        for(uint i = 0; i < _categories.length; i++) {
-            categories.push(Category({
-                name: _categories[i],
-                baseUri: _baseUri[i],
-                price: _price[i],
-                maxSupply: _maxSupply[i],
-                counterSupply: 0,
-                percentages: _percentages[i]
-            }));
-        }
+        require(_startDate > block.timestamp, "Start date must be in the future");
+        structCategories(_categories, _baseUri, _price, _maxSupply, _percentages);
         usdc = _usdc;
         investor = _investor;
         artist = _artist;
         percentageInvestor = _percentageInvestor;
         percentageArtist = _percentageArtist;
+        percentageArtistOpensea = _percentageArtistOpensea;
+        percentageInvestorOpensea = _percentageInvestorOpensea;
         startDate = _startDate;
         _tokenIds.increment();
     }
@@ -95,7 +109,7 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     receive() external payable {
         (bool success1, ) = payable(investor).call{value: ((msg.value * percentageInvestor) / 100)}("");
 		require(success1);
-        (bool success2, ) = payable(artist).call{value: (msg.value * percentageArtist) / 100}("");
+        (bool success2, ) = payable(artist).call{value: (msg.value * percentageArtistOpensea) / 100}("");
 		require(success2);
         emit OpenseaReceived(msg.sender, msg.value);
     }
@@ -125,6 +139,22 @@ contract ERC721Token is ERC721Enumerable, Pausable {
             sum += _arr[i];
         }
         return sum;
+    }
+
+    /**
+    * @notice Add data to categories
+    */
+    function structCategories(string[] memory _categories, string[] memory _baseUri, uint[] memory _price, uint[] memory _maxSupply, uint[] memory _percentages) internal {
+      for(uint i = 0; i < _categories.length; i++) {
+            categories.push(Category({
+                name: _categories[i],
+                baseUri: _baseUri[i],
+                price: _price[i],
+                maxSupply: _maxSupply[i],
+                counterSupply: 0,
+                percentages: _percentages[i]
+            }));
+        }
     }
 
     /**
@@ -221,8 +251,10 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     *
     */
     function withdraw() external payable onlyInvestor {
-        (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
-		require(success);
+        (bool success1, ) = payable(investor).call{value: ((msg.value * percentageInvestor) / 100)}("");
+		require(success1);
+        (bool success2, ) = payable(artist).call{value: (msg.value * percentageArtist) / 100}("");
+		require(success2);
     }
 
     /**
@@ -293,6 +325,21 @@ contract ERC721Token is ERC721Enumerable, Pausable {
     }
 
     /**
+    * @notice set artist percentage for opensea
+    */
+    function setArtistPercentageOpensea(uint _percentageArtistOpensea) external onlyInvestor {
+        percentageArtistOpensea = _percentageArtistOpensea;
+    }
+
+    /**
+    * @notice set investor percentage for opensea
+    */
+    function setInvestorPercentageOpensea(uint _percentageInvestorOpensea) external onlyInvestor {
+        percentageInvestorOpensea = _percentageInvestorOpensea;
+    }
+
+
+    /**
     * @notice set start date
     */
     function setStartDate(uint _startDate) external onlyInvestor {
@@ -315,5 +362,15 @@ contract ERC721Token is ERC721Enumerable, Pausable {
         uint claimableReward = RoyaltiesClaimablePerCategory[indexCategorie] - RoyaltiesClaimedPerId[_tokenId];
         return claimableReward;
     }
+
+
+    /**
+    * @notice get price usdc
+    */
+    function getPrice() public view  returns (uint256) {
+        StructLib.Slot memory slot = IUniswapPrice(poolContract).slot0();
+        uint256 sqrtPriceX96 = uint256(slot.sqrtPriceX96);
+        return sqrtPriceX96;
+    } 
 }
 
